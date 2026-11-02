@@ -3373,6 +3373,15 @@ func (ts *IntegrationTestSuite) TestInterceptorCalls() {
 	ts.NoError(run.Get(ctx, &resStr))
 	ts.Equal("finished(activity(workflow(root)))", resStr)
 
+	history := ts.client.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	eventCount := 0
+	for history.HasNext() {
+		_, err := history.Next()
+		ts.Require().NoError(err)
+		eventCount++
+	}
+	ts.Positive(eventCount)
+
 	// Make other client calls we know will fail
 	_, _ = ts.client.SignalWithStartWorkflow(ctx, "badid", "badsignal", nil, client.StartWorkflowOptions{}, "badworkflow")
 	_ = ts.client.CancelWorkflow(ctx, "badid", "badrunid")
@@ -3391,6 +3400,34 @@ func (ts *IntegrationTestSuite) TestInterceptorCalls() {
 		"ClientOutboundInterceptor.ExecuteWorkflow": {
 			arg(1, func(i any) {
 				ts.Equal("InterceptorCalls", i.(*interceptor.ClientExecuteWorkflowInput).WorkflowType)
+			}),
+		},
+		"ClientOutboundInterceptor.GetWorkflowResult": {
+			arg(1, func(i any) {
+				in := i.(*interceptor.ClientGetWorkflowResultInput)
+				ts.Equal(run.GetID(), in.WorkflowID)
+				ts.Equal(run.GetRunID(), in.RunID)
+				ts.Equal(client.WorkflowRunGetOptions{}, in.Options)
+			}),
+			result(0, func(i any) {
+				out := i.(*interceptor.ClientGetWorkflowResultOutput)
+				ts.Nil(out.Error)
+				var result string
+				ts.NoError(out.Result.Get(&result))
+				ts.Equal(resStr, result)
+			}),
+			result(1, func(i any) { ts.Nil(i) }),
+		},
+		"ClientOutboundInterceptor.GetWorkflowHistory": {
+			arg(1, func(i any) {
+				in := i.(*interceptor.ClientGetWorkflowHistoryInput)
+				ts.Equal(run.GetID(), in.WorkflowID)
+				ts.Equal(run.GetRunID(), in.RunID)
+				ts.False(in.IsLongPoll)
+				ts.Equal(enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT, in.FilterType)
+			}),
+			result(0, func(i any) {
+				ts.NotNil(i.(*interceptor.ClientGetWorkflowHistoryOutput).Iterator)
 			}),
 		},
 		// WorkflowInboundInterceptor

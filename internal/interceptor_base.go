@@ -540,6 +540,22 @@ func (c *ClientOutboundInterceptorBase) ExecuteWorkflow(
 	return c.Next.ExecuteWorkflow(ctx, in)
 }
 
+// GetWorkflowResult implements ClientOutboundInterceptor.GetWorkflowResult.
+func (c *ClientOutboundInterceptorBase) GetWorkflowResult(
+	ctx context.Context,
+	in *ClientGetWorkflowResultInput,
+) (*ClientGetWorkflowResultOutput, error) {
+	return c.Next.GetWorkflowResult(ctx, in)
+}
+
+// GetWorkflowHistory implements ClientOutboundInterceptor.GetWorkflowHistory.
+func (c *ClientOutboundInterceptorBase) GetWorkflowHistory(
+	ctx context.Context,
+	in *ClientGetWorkflowHistoryInput,
+) *ClientGetWorkflowHistoryOutput {
+	return c.Next.GetWorkflowHistory(ctx, in)
+}
+
 // SignalWorkflow implements ClientOutboundInterceptor.SignalWorkflow.
 func (c *ClientOutboundInterceptorBase) SignalWorkflow(ctx context.Context, in *ClientSignalWorkflowInput) error {
 	return c.Next.SignalWorkflow(ctx, in)

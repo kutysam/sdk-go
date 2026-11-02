@@ -389,6 +389,19 @@ type ClientOutboundInterceptor interface {
 	// interceptor.Header will return a non-nil map for this context.
 	ExecuteWorkflow(context.Context, *ClientExecuteWorkflowInput) (WorkflowRun, error)
 
+	// GetWorkflowResult intercepts client.WorkflowRun.Get and GetWithOptions.
+	// It is called once per Get or GetWithOptions call, including when following runs.
+	// Workflow execution errors are returned in the output; the method error
+	// represents a failure to retrieve the outcome. The handle decodes Result
+	// into the caller's destination after the interceptor chain returns.
+	GetWorkflowResult(context.Context, *ClientGetWorkflowResultInput) (*ClientGetWorkflowResultOutput, error)
+
+	// GetWorkflowHistory intercepts client.Client.GetWorkflowHistory. It is called
+	// when the iterator is created, not for each page or event. Interceptors can
+	// wrap the output's Iterator to observe history retrieval and errors.
+	// Internal history requests made by GetWorkflowResult do not invoke this hook.
+	GetWorkflowHistory(context.Context, *ClientGetWorkflowHistoryInput) *ClientGetWorkflowHistoryOutput
+
 	// CreateSchedule - Intercept a service call to CreateSchedule
 	CreateSchedule(ctx context.Context, options *ScheduleClientCreateInput) (ScheduleHandle, error)
 
@@ -568,6 +581,63 @@ type ClientExecuteWorkflowInput struct {
 	WorkflowType string
 	// Args are the arguments of the workflow.
 	Args []any
+}
+
+// ClientGetWorkflowResultInput is the input to
+// ClientOutboundInterceptor.GetWorkflowResult.
+//
+// Interceptors must forward this input or a copy of it to preserve the
+// workflow run's decoding and history retrieval state.
+//
+// Exposed as: [go.temporal.io/sdk/interceptor.ClientGetWorkflowResultInput]
+type ClientGetWorkflowResultInput struct {
+	// WorkflowID is the ID of the workflow whose result is requested.
+	// Changes to WorkflowID or RunID redirect only this result request; they
+	// do not change the workflow run handle's identity or current run.
+	WorkflowID string
+	// RunID is the initial run ID to wait for.
+	RunID string
+	// Options control whether to follow subsequent runs.
+	Options WorkflowRunGetOptions
+
+	workflowRun *workflowRunImpl
+}
+
+// ClientGetWorkflowResultOutput is the output of
+// ClientOutboundInterceptor.GetWorkflowResult.
+//
+// Exposed as: [go.temporal.io/sdk/interceptor.ClientGetWorkflowResultOutput]
+type ClientGetWorkflowResultOutput struct {
+	// Result is the result of a successfully completed workflow, or nil if it
+	// completed without a result.
+	Result converter.EncodedValue
+	// Error is the workflow execution error, if the workflow did not complete
+	// successfully.
+	Error error
+}
+
+// ClientGetWorkflowHistoryInput is the input to
+// ClientOutboundInterceptor.GetWorkflowHistory.
+//
+// Exposed as: [go.temporal.io/sdk/interceptor.ClientGetWorkflowHistoryInput]
+type ClientGetWorkflowHistoryInput struct {
+	// WorkflowID is the ID of the workflow whose history is requested.
+	WorkflowID string
+	// RunID is the run ID of the workflow, or empty to use the current run.
+	RunID string
+	// IsLongPoll waits for new events when the end of the history is reached.
+	IsLongPoll bool
+	// FilterType selects which history events to retrieve.
+	FilterType enumspb.HistoryEventFilterType
+}
+
+// ClientGetWorkflowHistoryOutput is the output of
+// ClientOutboundInterceptor.GetWorkflowHistory.
+//
+// Exposed as: [go.temporal.io/sdk/interceptor.ClientGetWorkflowHistoryOutput]
+type ClientGetWorkflowHistoryOutput struct {
+	// Iterator lazily retrieves history events and reports retrieval errors.
+	Iterator HistoryEventIterator
 }
 
 // ClientSignalWorkflowInput is the input to
